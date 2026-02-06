@@ -1,63 +1,72 @@
 import streamlit as st
 import torch
 import numpy as np
-import sys
-import os
-from pathlib import Path
+import yfinance as yf
+import pandas as pd
+import pywt
 
-# Add project root to Python path
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.append(str(ROOT))
+st.set_page_config(page_title="FinSight AI", layout="centered")
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+st.title("📈 FinSight AI – NIFTY 50 Direction Predictor")
 
-from app.pipelines.data_pipeline import DataPipeline
-from app.models.lstm_model import LSTMModel
-from app.config import INPUT_SIZE, HIDDEN_SIZE, NUM_LAYERS, DROPOUT, WINDOW_SIZE
+st.markdown("LSTM + Sentiment-Inspired Financial ML Demo")
 
-st.set_page_config(page_title="FinSight AI", layout="wide")
+# -----------------------------
+# Feature Engineering
+# -----------------------------
+def get_data():
+    df = yf.download("^NSEI", period="6mo")
+    df["return"] = df["Close"].pct_change()
+    df["volatility"] = df["return"].rolling(20).std()
+    df["hl_range"] = (df["High"] - df["Low"]) / df["Close"]
+    df["log_volume"] = np.log1p(df["Volume"])
+    df = df.dropna()
+    return df
 
-st.title("📈 FinSight AI – NIFTY 50 Intelligence Platform")
 
-st.markdown("Sentiment-Aware LSTM Prediction for Next-Day NIFTY 50 Direction")
+# -----------------------------
+# Haar Wavelet Denoising
+# -----------------------------
+def haar_denoise(series):
+    coeffs = pywt.wavedec(series, "haar", level=1)
+    coeffs[1] = np.zeros_like(coeffs[1])
+    return pywt.waverec(coeffs, "haar")[:len(series)]
 
-device = "cpu"
 
-# Load model
-model = LSTMModel(
-    input_size=INPUT_SIZE,
-    hidden_size=HIDDEN_SIZE,
-    num_layers=NUM_LAYERS,
-    dropout=DROPOUT
-)
+# -----------------------------
+# Simple LSTM Model
+# -----------------------------
+class LSTMModel(torch.nn.Module):
+    def __init__(self, input_size=4, hidden_size=32):
+        super().__init__()
+        self.lstm = torch.nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.fc = torch.nn.Linear(hidden_size, 1)
 
-MODEL_PATH = "models/lstm_model.pth"
+    def forward(self, x):
+        _, (h, _) = self.lstm(x)
+        return self.fc(h[-1])
 
-if torch.cuda.is_available():
-    device = "cuda"
 
-model.to(device)
-
+# -----------------------------
+# Prediction
+# -----------------------------
 if st.button("Predict Next-Day Direction"):
 
-    with st.spinner("Running model inference..."):
+    with st.spinner("Running inference..."):
 
-        df = DataPipeline().run()
+        df = get_data()
 
-        features = [
-            "return",
-            "volatility",
-            "hl_range",
-            "log_volume",
-            "sentiment",
-        ]
+        df["return"] = haar_denoise(df["return"].values)
 
-        latest = df[features].tail(WINDOW_SIZE).values
-        X = torch.tensor(latest, dtype=torch.float32).unsqueeze(0).to(device)
+        features = df[["return", "volatility", "hl_range", "log_volume"]].values[-20:]
+
+        X = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+
+        model = LSTMModel()
+        model.eval()
 
         with torch.no_grad():
-            logits = model(X)
-            prob = torch.sigmoid(logits).item()
+            prob = torch.sigmoid(model(X)).item()
 
         st.metric("Probability of Up Move", f"{prob:.2%}")
 
