@@ -1,0 +1,16 @@
+yfinance
+pandas
+numpy
+requests
+beautifulsoup4
+feedparser
+transformers
+torch
+scikit-learn
+pywavelets
+mlflow
+fastapi
+uvicorn
+streamlit
+python-dotenv
+lxml
