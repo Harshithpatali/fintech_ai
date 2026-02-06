@@ -1,6 +1,10 @@
 import streamlit as st
 import torch
 import numpy as np
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.pipelines.data_pipeline import DataPipeline
 from app.models.lstm_model import LSTMModel
