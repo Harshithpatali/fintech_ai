@@ -1,4 +1,5 @@
 # fintech_ai
+Link  https://fintechai-4cuxj6ftnb8eezc42xeia8.streamlit.app/
 
 # 🚀 FinSight AI – NIFTY 50 Financial Intelligence Platform
 
